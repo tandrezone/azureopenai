@@ -142,10 +142,13 @@ function parseBomXml(string $filePath): array
 /**
  * Parse a BOM XLSX file and return structured data.
  *
- * The spreadsheet must contain a "Product" sheet with product details and a
- * "Components" sheet listing each component.  Both sheets should have a
- * header row whose values are used as field names (e.g. Name, PartNumber,
- * Quantity, Unit, Revision).
+ * The spreadsheet should ideally contain a "Product" sheet with product details
+ * and a "Components" sheet listing each component.  If those named sheets are
+ * not found the parser falls back to positional sheets: the first sheet is used
+ * for product data and the second sheet (if present) for components.
+ *
+ * Both sheets should have a header row whose values are used as field names
+ * (e.g. Name, PartNumber, Quantity, Unit, Revision).
  *
  * @param  string $filePath Path to the XLSX file.
  * @return array{product: array<string,string>, components: list<array<string,string>>}
@@ -161,19 +164,22 @@ function parseBomXlsx(string $filePath): array
 
     $spreadsheet = \PhpOffice\PhpSpreadsheet\IOFactory::load($filePath);
 
-    // ── Product sheet ────────────────────────────────────────────────────
-    $productSheet = $spreadsheet->getSheetByName('Product');
-    if ($productSheet === null) {
+    if ($spreadsheet->getSheetCount() === 0) {
         throw new RuntimeException(
-            'The XLSX file must contain a sheet named "Product".'
+            'The XLSX file does not contain any sheets.'
         );
     }
+
+    // ── Product sheet ────────────────────────────────────────────────────
+    // Try the named sheet first, then fall back to the first sheet.
+    $productSheet = $spreadsheet->getSheetByName('Product')
+                 ?? $spreadsheet->getSheet(0);
 
     $productData = $productSheet->toArray(null, true, true, true);
 
     if (count($productData) < 2) {
         throw new RuntimeException(
-            'The "Product" sheet must have a header row and at least one data row.'
+            'The product sheet must have a header row and at least one data row.'
         );
     }
 
@@ -188,24 +194,27 @@ function parseBomXlsx(string $filePath): array
 
     if (empty($product)) {
         throw new RuntimeException(
-            'No product data found in the "Product" sheet.'
+            'No product data found in the product sheet.'
         );
     }
 
     // ── Components sheet ─────────────────────────────────────────────────
+    // Try the named sheet first, then fall back to the second sheet (if any).
     $compSheet = $spreadsheet->getSheetByName('Components');
+    if ($compSheet === null && $spreadsheet->getSheetCount() > 1) {
+        $compSheet = $spreadsheet->getSheet(1);
+    }
+
+    // Components are optional – some BOM files only have a product sheet.
     if ($compSheet === null) {
-        throw new RuntimeException(
-            'The XLSX file must contain a sheet named "Components".'
-        );
+        return ['product' => $product, 'components' => []];
     }
 
     $compData = $compSheet->toArray(null, true, true, true);
 
     if (count($compData) < 2) {
-        throw new RuntimeException(
-            'The "Components" sheet must have a header row and at least one data row.'
-        );
+        // The components sheet exists but has no usable rows – treat as empty.
+        return ['product' => $product, 'components' => []];
     }
 
     $compHeaders = array_map('trim', array_map('strval', array_values($compData[1])));
