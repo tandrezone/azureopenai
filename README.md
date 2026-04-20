@@ -1,8 +1,8 @@
 # azureopenai – BOM Description Generator
 
-A PHP script that reads an XML **Bill of Materials (BOM)** file (or an XSLT
-file with an embedded BOM), then calls **Azure OpenAI** to generate a concise
-product description based on the listed components.
+A PHP script that reads an XML or XLSX **Bill of Materials (BOM)** file (or an
+XSLT file with an embedded BOM), then calls **Azure OpenAI** to generate a
+concise product description based on the listed components.
 
 ---
 
@@ -13,14 +13,17 @@ product description based on the listed components.
 | `bom_description.php` | Main script – parse BOM + call Azure OpenAI |
 | `config.php` | Azure OpenAI credentials / settings |
 | `sample_bom.xml` | Example BOM XML file (Industrial Water Pump) |
+| `sample_bom.xlsx` | Example BOM XLSX file (Industrial Water Pump) |
 | `.env.example` | Template for environment variable configuration |
+| `composer.json` | PHP dependencies (PhpSpreadsheet for XLSX support) |
 
 ---
 
 ## Requirements
 
 * PHP 8.0 or later
-* PHP extensions: `simplexml`, `curl`, `json` (all bundled with most PHP distributions)
+* PHP extensions: `simplexml`, `curl`, `json`, `zip`, `mbstring`, `gd` (all bundled with most PHP distributions)
+* [Composer](https://getcomposer.org/) (for XLSX support via PhpSpreadsheet)
 * An [Azure OpenAI](https://azure.microsoft.com/en-us/products/ai-services/openai-service) resource with a deployed model (e.g. `gpt-4`)
 
 ---
@@ -29,7 +32,13 @@ product description based on the listed components.
 
 1. **Clone the repository** (or copy the files to your server).
 
-2. **Configure credentials** – open `config.php` and fill in your Azure OpenAI
+2. **Install PHP dependencies**:
+
+   ```bash
+   composer install
+   ```
+
+3. **Configure credentials** – open `config.php` and fill in your Azure OpenAI
    values, *or* export the corresponding environment variables:
 
    ```bash
@@ -46,19 +55,25 @@ product description based on the listed components.
 ## Usage
 
 ```bash
-php bom_description.php <path-to-bom-xml>
+php bom_description.php <path-to-bom-file>
 ```
 
-### Example with the included sample file
+### Example with the included XML sample
 
 ```bash
 php bom_description.php sample_bom.xml
 ```
 
+### Example with the included XLSX sample
+
+```bash
+php bom_description.php sample_bom.xlsx
+```
+
 Sample output:
 
 ```
-Parsing BOM file: sample_bom.xml
+Parsing BOM file: sample_bom.xlsx
 Product: Industrial Water Pump
 Components found: 8
 
@@ -101,6 +116,27 @@ The script expects an XML file with the following structure:
 If your file is an XSLT stylesheet that contains an embedded
 `<BillOfMaterials>` element, the script will locate it automatically and
 extract the BOM data from it.
+
+## BOM XLSX format
+
+The XLSX workbook must contain two sheets:
+
+### "Product" sheet
+
+| Name | PartNumber | Revision |
+|---|---|---|
+| Product Name | PN-001 | A |
+
+### "Components" sheet
+
+| PartNumber | Name | Quantity | Unit |
+|---|---|---|---|
+| COMP-001 | Component Name | 2 | pcs |
+| COMP-002 | Another Component | 1 | set |
+
+The first row of each sheet is treated as the header row. Column names must
+match the expected field names (`Name`, `PartNumber`, `Quantity`, `Unit`,
+`Revision`).
 
 ---
 
