@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<BillOfMaterials>
+    <Product>
+        <Name>Industrial Water Pump</Name>
+        <PartNumber>WP-2000X</PartNumber>
+        <Revision>B</Revision>
+    </Product>
+    <Components>
+        <Component>
+            <PartNumber>MTR-AC-3PH</PartNumber>
+            <Name>AC Three-Phase Motor</Name>
+            <Quantity>1</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>IMP-SS-150</PartNumber>
+            <Name>Stainless Steel Impeller 150mm</Name>
+            <Quantity>1</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>SEAL-MEC-25</PartNumber>
+            <Name>Mechanical Seal 25mm</Name>
+            <Quantity>2</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>BRG-6205</PartNumber>
+            <Name>Deep Groove Ball Bearing 6205</Name>
+            <Quantity>4</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>HSG-CI-200</PartNumber>
+            <Name>Cast Iron Housing 200mm</Name>
+            <Quantity>1</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>PIPE-FLG-50</PartNumber>
+            <Name>Flanged Pipe Connector 50mm</Name>
+            <Quantity>2</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+        <Component>
+            <PartNumber>GSKT-RUBBER</PartNumber>
+            <Name>Rubber Gasket Set</Name>
+            <Quantity>1</Quantity>
+            <Unit>set</Unit>
+        </Component>
+        <Component>
+            <PartNumber>BOLT-M10-SS</PartNumber>
+            <Name>Stainless Steel Bolt M10</Name>
+            <Quantity>16</Quantity>
+            <Unit>pcs</Unit>
+        </Component>
+    </Components>
+</BillOfMaterials>
