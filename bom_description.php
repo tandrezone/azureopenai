@@ -4,7 +4,7 @@
 /**
  * BOM Description Generator
  *
- * This script reads an XML or XLSX file containing a Bill of Materials (BOM),
+ * This script reads an XML, XLSX, or JSON file containing a Bill of Materials (BOM),
  * extracts the product and component information, then calls Azure OpenAI
  * to generate a product description based on the BOM.
  *
@@ -14,6 +14,7 @@
  * Examples:
  *   php bom_description.php sample_bom.xml
  *   php bom_description.php sample_bom.xlsx
+ *   php bom_description.php sample_bom.json
  */
 
 // ── Autoloader ───────────────────────────────────────────────────────────────
