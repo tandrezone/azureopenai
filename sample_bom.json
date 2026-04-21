@@ -1,0 +1,60 @@
+{
+  "products": [
+    {
+      "product_id": "126352",
+      "metadata": {
+        "model_name": "Square Tin Candle (40g)",
+        "launch_date": "Aug-26",
+        "status": "LAUNCH"
+      },
+      "specifications": {
+        "description": "Square tin candle with 40 grams of wax blend",
+        "colors": "Square",
+        "recycled": false,
+        "fsc_certified": false,
+        "size": "5.5*5.5*4cm",
+        "unit": "1 piece"
+      },
+      "bill_of_materials": [
+        { "id": 1, "component": "vessel--tin" },
+        { "id": 2, "component": "30% soybean wax + 70% paraffin" },
+        { "id": 3, "component": "1x 40 grams" }
+      ],
+      "communication_history": [
+        {
+          "date": "2025-12-08",
+          "user": "Jerry",
+          "message": "LBC AND KWUNG'S RE-CHECK the china price..."
+        },
+        {
+          "date": "2025-12-12",
+          "user": "Annemieke",
+          "message": "Jerry is this the price, based on 40 gram wax..."
+        }
+      ]
+    },
+    {
+      "product_id": "126353",
+      "metadata": {
+        "model_name": "Round Glass Candle (80g)",
+        "launch_date": "Sep-26",
+        "status": "DEVELOPMENT"
+      },
+      "specifications": {
+        "description": "Round glass jar candle with 80 grams of wax blend",
+        "colors": "Clear",
+        "recycled": true,
+        "fsc_certified": false,
+        "size": "7*7*6cm",
+        "unit": "1 piece"
+      },
+      "bill_of_materials": [
+        { "id": 1, "component": "vessel--glass jar" },
+        { "id": 2, "component": "50% soybean wax + 50% coconut wax" },
+        { "id": 3, "component": "cotton wick" },
+        { "id": 4, "component": "1x 80 grams" }
+      ],
+      "communication_history": []
+    }
+  ]
+}

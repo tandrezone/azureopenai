@@ -44,6 +44,7 @@ if ($argc < 2) {
     fwrite(STDERR, "Usage: php bom_description.php <path-to-bom-file>\n");
     fwrite(STDERR, "Example: php bom_description.php sample_bom.xml\n");
     fwrite(STDERR, "         php bom_description.php sample_bom.xlsx\n");
+    fwrite(STDERR, "         php bom_description.php sample_bom.json\n");
     exit(1);
 }
 
@@ -59,18 +60,22 @@ if (!file_exists($bomFile)) {
 /**
  * Detect file type and parse BOM data accordingly.
  *
- * @param  string $filePath Path to the BOM file (XML or XLSX).
- * @return array{product: array<string,string>, components: list<array<string,string>>}
+ * Returns a list of BOMs so that multi-product files (e.g. JSON) are fully
+ * supported.  XML and XLSX files always return a single-element list.
+ *
+ * @param  string $filePath Path to the BOM file (XML, XLSX, or JSON).
+ * @return list<array{product: array<string,string>, components: list<array<string,string>>}>
  */
 function parseBomFile(string $filePath): array
 {
     $extension = strtolower(pathinfo($filePath, PATHINFO_EXTENSION));
 
     return match ($extension) {
-        'xml', 'xslt', 'xsl' => parseBomXml($filePath),
-        'xlsx' => parseBomXlsx($filePath),
-        default => throw new RuntimeException(
-            "Unsupported file format: .{$extension}. Supported formats: .xml, .xsl, .xslt, .xlsx"
+        'xml', 'xslt', 'xsl' => [parseBomXml($filePath)],
+        'xlsx'                => [parseBomXlsx($filePath)],
+        'json'                => parseBomJson($filePath),
+        default               => throw new RuntimeException(
+            "Unsupported file format: .{$extension}. Supported formats: .xml, .xsl, .xslt, .xlsx, .json"
         ),
     };
 }
@@ -243,6 +248,104 @@ function parseBomXlsx(string $filePath): array
 }
 
 /**
+ * Parse a BOM JSON file and return structured data for every product.
+ *
+ * The JSON file must contain a top-level "products" array.  Each element may
+ * have the following keys (all optional except where noted):
+ *   - product_id        (string)
+ *   - metadata          { model_name, launch_date, status, … }
+ *   - specifications    { description, colors, size, unit, … }
+ *   - bill_of_materials [ { id, component }, … ]
+ *   - communication_history (ignored for the description prompt)
+ *
+ * The function normalises the data so that downstream helpers receive the same
+ * shape as XML/XLSX BOMs:
+ *   - metadata.model_name  → product['Name']
+ *   - bill_of_materials[].component → component['Name']
+ *
+ * @param  string $filePath Path to the JSON file.
+ * @return list<array{product: array<string,string>, components: list<array<string,string>>}>
+ */
+function parseBomJson(string $filePath): array
+{
+    $raw = file_get_contents($filePath);
+
+    if ($raw === false) {
+        throw new RuntimeException("Could not read file: {$filePath}");
+    }
+
+    $data = json_decode($raw, true);
+
+    if (json_last_error() !== JSON_ERROR_NONE) {
+        throw new RuntimeException(
+            "Failed to parse JSON file: " . json_last_error_msg()
+        );
+    }
+
+    if (!isset($data['products']) || !is_array($data['products'])) {
+        throw new RuntimeException(
+            'The JSON file must contain a top-level "products" array.'
+        );
+    }
+
+    if (empty($data['products'])) {
+        throw new RuntimeException('The "products" array in the JSON file is empty.');
+    }
+
+    $boms = [];
+
+    foreach ($data['products'] as $index => $item) {
+        // ── Product fields ────────────────────────────────────────────────
+        $product = [];
+
+        if (isset($item['product_id'])) {
+            $product['ProductId'] = (string)$item['product_id'];
+        }
+
+        // Flatten metadata; map model_name → Name for buildPrompt compatibility.
+        if (isset($item['metadata']) && is_array($item['metadata'])) {
+            foreach ($item['metadata'] as $key => $value) {
+                $mappedKey = ($key === 'model_name') ? 'Name' : $key;
+                $product[$mappedKey] = (string)$value;
+            }
+        }
+
+        // Flatten specifications (booleans become "true"/"false" strings).
+        if (isset($item['specifications']) && is_array($item['specifications'])) {
+            foreach ($item['specifications'] as $key => $value) {
+                if (is_bool($value)) {
+                    $product[$key] = $value ? 'true' : 'false';
+                } else {
+                    $product[$key] = (string)$value;
+                }
+            }
+        }
+
+        if (empty($product)) {
+            throw new RuntimeException(
+                "Product at index {$index} contains no usable fields."
+            );
+        }
+
+        // ── Components from bill_of_materials ─────────────────────────────
+        $components = [];
+
+        if (isset($item['bill_of_materials']) && is_array($item['bill_of_materials'])) {
+            foreach ($item['bill_of_materials'] as $entry) {
+                if (isset($entry['component'])) {
+                    // Map "component" → "Name" for buildPrompt compatibility.
+                    $components[] = ['Name' => (string)$entry['component']];
+                }
+            }
+        }
+
+        $boms[] = ['product' => $product, 'components' => $components];
+    }
+
+    return $boms;
+}
+
+/**
  * Build the text prompt sent to Azure OpenAI.
  *
  * @param  array{product: array<string,string>, components: list<array<string,string>>} $bom
@@ -250,14 +353,14 @@ function parseBomXlsx(string $filePath): array
  */
 function buildPrompt(array $bom): string
 {
-    $product = $bom['product'];
+    $product    = $bom['product'];
     $components = $bom['components'];
 
     $productName = $product['Name'] ?? 'Unknown Product';
     $partNumber  = $product['PartNumber'] ?? '';
     $revision    = $product['Revision'] ?? '';
 
-    $lines = [];
+    $lines   = [];
     $lines[] = "You are a technical writer. Based on the following Bill of Materials (BOM), "
              . "write a clear and informative product description. "
              . "The description should explain what the product is, its main purpose, "
@@ -273,21 +376,31 @@ function buildPrompt(array $bom): string
         $lines[] = "Revision: {$revision}";
     }
 
+    // Extra fields present in JSON-sourced products (size, colors, status, etc.).
+    $extraKeys = ['size', 'unit', 'colors', 'status', 'launch_date', 'description',
+                  'recycled', 'fsc_certified', 'ProductId'];
+    foreach ($extraKeys as $key) {
+        if (isset($product[$key]) && $product[$key] !== '') {
+            $label   = ucfirst(str_replace('_', ' ', $key));
+            $lines[] = "{$label}: {$product[$key]}";
+        }
+    }
+
     if (!empty($components)) {
         $lines[] = '';
         $lines[] = "Bill of Materials:";
         foreach ($components as $comp) {
-            $name     = $comp['Name'] ?? 'Unknown';
-            $qty      = $comp['Quantity'] ?? '';
-            $unit     = $comp['Unit'] ?? '';
-            $pn       = isset($comp['PartNumber']) ? " (PN: {$comp['PartNumber']})" : '';
-            $qtyStr   = ($qty !== '' && $unit !== '') ? "{$qty} {$unit}" : $qty;
+            $name   = $comp['Name'] ?? 'Unknown';
+            $qty    = $comp['Quantity'] ?? '';
+            $unit   = $comp['Unit'] ?? '';
+            $pn     = isset($comp['PartNumber']) ? " (PN: {$comp['PartNumber']})" : '';
+            $qtyStr = ($qty !== '' && $unit !== '') ? "{$qty} {$unit}" : $qty;
             $lines[] = "  - {$name}{$pn}" . ($qtyStr !== '' ? ": {$qtyStr}" : '');
         }
     }
 
     $lines[] = '';
-    $lines[] = "Please write a concise product description (2-4 paragraphs).";
+    $lines[] = "Please write a product description that is strictly between 100 and 150 words.";
 
     return implode("\n", $lines);
 }
@@ -368,20 +481,34 @@ function callAzureOpenAI(string $prompt, array $config): string
 
 try {
     echo "Parsing BOM file: {$bomFile}\n";
-    $bom = parseBomFile($bomFile);
+    $boms = parseBomFile($bomFile);
 
-    $productName = $bom['product']['Name'] ?? 'Unknown Product';
-    $componentCount = count($bom['components']);
-    echo "Product: {$productName}\n";
-    echo "Components found: {$componentCount}\n\n";
+    $totalProducts = count($boms);
+    echo "Products found: {$totalProducts}\n\n";
 
-    echo "Building prompt and calling Azure OpenAI...\n\n";
-    $prompt = buildPrompt($bom);
+    foreach ($boms as $index => $bom) {
+        $productName    = $bom['product']['Name'] ?? 'Unknown Product';
+        $componentCount = count($bom['components']);
 
-    $description = callAzureOpenAI($prompt, $config);
+        if ($totalProducts > 1) {
+            echo "── Product " . ($index + 1) . " of {$totalProducts} ──────────────────────────────\n";
+        }
 
-    echo "=== Generated Product Description ===\n\n";
-    echo $description . "\n";
+        echo "Product: {$productName}\n";
+        echo "Components found: {$componentCount}\n\n";
+
+        echo "Building prompt and calling Azure OpenAI...\n\n";
+        $prompt      = buildPrompt($bom);
+        $description = callAzureOpenAI($prompt, $config);
+
+        if ($totalProducts > 1) {
+            echo "=== Description for: {$productName} ===\n\n";
+        } else {
+            echo "=== Generated Product Description ===\n\n";
+        }
+
+        echo $description . "\n\n";
+    }
 } catch (RuntimeException $e) {
     fwrite(STDERR, "Error: " . $e->getMessage() . "\n");
     exit(1);
